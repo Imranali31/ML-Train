@@ -1,0 +1,405 @@
+import pandas as pd
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+from sklearn.svm import SVC
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.metrics import confusion_matrix, accuracy_score
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+## Load dataset
+data_set = pd.read_csv('fetal_health.csv')
+print(data_set.shape)
+f_title = data_set.columns
+print(f_title)
+data_set.head()
+Data Preprocessing
+def get_mean(column):
+    sum = 0
+    cnt = 0
+    for i in range(len(column)):
+        if not pd.isnull(column[i]):
+            try:
+                sum += float(str(column[i]).strip())
+                cnt += 1
+                
+            except (ValueError, TypeError) as e:
+                cnt = cnt
+    return sum / cnt        
+Replace Numeric Empty Cell with previous value
+
+def replace_numeric_empty_cell(column):
+    # column = replace_non_numeric_cell(column)
+    mean = get_mean(column)
+    print(mean)
+    col = list()
+    for i in range(len(column)):
+        if pd.isnull(column[i]):
+            try:
+                # col.append(col[-1])
+                col.append(mean)
+            except (ValueError, TypeError) as e:
+                print(f"Error: {e}")
+                col.append(0)
+        else:
+            try:
+                col.append(float(str(column[i]).strip()))
+                
+            except (ValueError, TypeError) as e:
+                print(f"Error: {e}")
+                col.append(0)
+    return col
+
+data_set['uterine_contractions'] = replace_numeric_empty_cell(data_set['uterine_contractions'])
+columns_of_numeric = ['baseline value', 'accelerations', 'fetal_movement',
+       'uterine_contractions', 'light_decelerations', 'severe_decelerations',
+       'prolongued_decelerations', 'abnormal_short_term_variability',
+       'mean_value_of_short_term_variability',
+       'percentage_of_time_with_abnormal_long_term_variability',
+       'mean_value_of_long_term_variability', 'histogram_width',
+       'histogram_min', 'histogram_max', 'histogram_number_of_peaks',
+       'histogram_number_of_zeroes', 'histogram_mode', 'histogram_mean',
+       'histogram_median', 'histogram_variance', 'histogram_tendency',
+       'fetal_health']
+for column in columns_of_numeric:
+    # print(column)
+    data_set[column] = replace_numeric_empty_cell(data_set[column])
+
+## Visualize Correlation Between Features
+# print(f_labels)
+correlation_matrix = data_set[f_title].corr()
+# print(correlation_matrix)
+plt.figure(figsize=(16,12))
+sns.heatmap(correlation_matrix, annot=True, cmap="coolwarm")
+plt.title("correlation_matrix")
+plt.show()
+## Split Dependent and Independent Data
+#target_column_name = 'cardio' 
+x = data_set.drop(columns='fetal_health')
+y = data_set['fetal_health']
+print(x.shape, y.shape)
+## 1. Recursive Feature Elimination (RFE):
+from sklearn.feature_selection import RFE
+from sklearn.svm import SVC
+
+estimator = SVC(kernel="linear")
+selector = RFE(estimator, n_features_to_select=15, step=1)  # Choose a target number of features
+selector = selector.fit(x, y)
+
+# Get the selected features
+selected_features = selector.support_
+x_selected = x.iloc[:, selected_features]
+print(x_selected.shape)
+## Visualize Selected Features 
+# print(f_labels)
+correlation_matrix = x_selected.corr()
+# print(correlation_matrix)
+plt.figure(figsize=(16,12))
+sns.heatmap(correlation_matrix, annot=True, cmap="coolwarm")
+plt.title("Correlation Matrix of Selected Features")
+plt.show()
+## Split Train Test dataset
+x_train,x_test,y_train,y_test = train_test_split(x,y,test_size=0.2,random_state=42)
+# print(x_train)
+scaler = StandardScaler()
+x_train = scaler.fit_transform(x_train)
+# print(x_train)
+x_test = scaler.fit_transform(x_test)
+print(x_train.shape,x_test.shape,y_train.shape,y_test.shape)
+
+x_train_fs,x_test_fs,y_train_fs,y_test_fs = train_test_split(x_selected,y,test_size=0.3,random_state=42)
+# print(x_train)
+scaler = StandardScaler()
+x_train_fs = scaler.fit_transform(x_train_fs)
+# print(x_train)
+x_test_fs = scaler.fit_transform(x_test_fs)
+print(x_train_fs.shape,x_test_fs.shape,y_train_fs.shape,y_test_fs.shape)
+## Logistic Regression
+def logistic_regression(_x_train, _x_test, _y_train, _y_test):
+    # Setting multi_class='multinomial' to use the softmax approach
+    clf = LogisticRegression(multi_class='multinomial', solver='lbfgs', max_iter=1000, random_state=42)
+    
+    # Train the model
+    clf.fit(_x_train, _y_train)
+    
+    # Make predictions on the test data
+    _y_pred = clf.predict(_x_test)
+
+    return accuracy_score(_y_test, _y_pred), confusion_matrix(_y_test, _y_pred),  classification_report(_y_test, _y_pred)
+
+# Evaluate the model
+accuracy_lr, conf_matrix_lr, class_report_lr = logistic_regression(x_train, x_test, y_train, y_test)
+accuracy_lr_fs, conf_matrix_lr_fs, class_report_lr_fs = logistic_regression(x_train_fs, x_test_fs, y_train_fs, y_test_fs)
+
+print(f"Accuracy: {accuracy_lr:.2f}")
+print(f"Accuracy Fs: {accuracy_lr_fs:.2f}")
+print("Confusion Matrix:\n", conf_matrix_lr)
+print("Confusion Matrix fs:\n", conf_matrix_lr_fs)
+print("Classification Report:\n", class_report_lr)
+print("Classification Report fs:\n", class_report_lr_fs)
+## SVM
+from sklearn.svm import SVC
+
+def svm(_x_train, _x_test, _y_train, _y_test):
+    classifier = SVC(kernel = 'linear', random_state = 0)
+    classifier.fit(_x_train, _y_train)
+    # Predicting the Test set results
+    _y_pred = classifier.predict(_x_test)
+    
+    # Evaluate the model
+    return accuracy_score(_y_test, _y_pred), confusion_matrix(_y_test, _y_pred), classification_report(_y_test, _y_pred)
+    
+accuracy_svm, conf_matrix_svm, class_report_svm = svm(x_train, x_test, y_train, y_test)
+accuracy_svm_fs, conf_matrix_svm_fs, class_report_svm_fs = svm(x_train_fs, x_test_fs, y_train_fs, y_test_fs)
+print(f"Accuracy: {accuracy_svm:.2f}")
+print(f"Accuracy fs: {accuracy_svm_fs:.2f}")
+print("Confusion Matrix:\n", conf_matrix_svm)
+print("Confusion Matrix fs:\n", conf_matrix_svm_fs)
+print("Classification Report:\n", class_report_svm)
+print("Classification Report fs:\n", class_report_svm_fs)
+## Random Forest
+from sklearn.ensemble import RandomForestRegressor
+def random_forest(_x_train, _x_test, _y_train, _y_test):
+    regressor = RandomForestRegressor(n_estimators = 10, random_state = 0)
+    regressor.fit(_x_train, _y_train)
+    _y_pred = regressor.predict(_x_test)
+    _y_pred = np.round(_y_pred, decimals=0)
+    
+    # Evaluate the model
+    return accuracy_score(_y_test, _y_pred), confusion_matrix(_y_test, _y_pred), classification_report(_y_test, _y_pred)
+
+accuracy_rf, conf_matrix_rf, class_report_rf = random_forest(x_train, x_test, y_train, y_test)
+accuracy_rf_fs, conf_matrix_rf_fs, class_report_rf_fs = random_forest(x_train_fs, x_test_fs, y_train_fs, y_test_fs)
+
+print(f"Accuracy: {accuracy_rf:.2f}")
+print(f"Accuracy fs: {accuracy_rf_fs:.2f}")
+print("Confusion Matrix:\n", conf_matrix_rf)
+print("Confusion Matrix fs:\n", conf_matrix_rf_fs)
+print("Classification Report:\n", class_report_rf)
+print("Classification Report_fs:\n", class_report_rf_fs)
+## Naive Bayes
+from sklearn.naive_bayes import GaussianNB
+
+def naive_bayes(_x_train, _x_test, _y_train, _y_test):
+    naive_bayes_model = GaussianNB()
+    naive_bayes_model.fit(_x_train, _y_train)
+    
+    _y_pred = naive_bayes_model.predict(_x_test)
+    _y_pred = np.round(_y_pred, decimals=0)
+    
+    
+    # Evaluate the model
+    return accuracy_score(_y_test, _y_pred), confusion_matrix(_y_test, _y_pred), classification_report(_y_test, _y_pred)
+
+accuracy_gnb, conf_matrix_gnb, class_report_gnb = naive_bayes(x_train, x_test, y_train, y_test)
+accuracy_gnb_fs, conf_matrix_gnb_fs, class_report_gnb_fs = naive_bayes(x_train_fs, x_test_fs, y_train_fs, y_test_fs)
+
+print(f"Accuracy: {accuracy_gnb:.2f}")
+print(f"Accuracy fs: {accuracy_gnb_fs:.2f}")
+print("Confusion Matrix:\n", conf_matrix_gnb)
+print("Confusion Matrix fs:\n", conf_matrix_gnb_fs)
+print("Classification Report fs:\n", class_report_gnb_fs)
+# Deep Learning Algorithm 
+## extract the predict value
+def extract_predict(y_pred):
+    y_pred = np.round(y_pred, decimals=0)
+    y_p = []
+    for y in y_pred:
+        if y[0]==1:
+            y_p.append(1)
+        elif y[1] == 1:
+            y_p.append(2)
+        else:
+            y_p.append(3)
+    return y_p
+## Feedforward Neural Network (FNN)
+import numpy as np
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+from sklearn.neural_network import MLPClassifier
+
+# Function to extract the predicted class from the output probabilities
+def extract_predict(predictions):
+    return np.argmax(predictions, axis=1)
+
+def fnn(_x_train, _x_test, _y_train, _y_test):
+    # Define the FNN model using MLPClassifier
+    model = MLPClassifier(hidden_layer_sizes=(64, 64), max_iter=1000, activation='relu', solver='adam', random_state=42)
+    
+    # Train the model
+    model.fit(_x_train, _y_train)
+    
+    # Make predictions
+    _y_pred = model.predict(_x_test)
+
+    # Evaluate predictions
+    acc = accuracy_score(_y_test, _y_pred)
+    cm = confusion_matrix(_y_test, _y_pred)
+    report = classification_report(_y_test, _y_pred)
+    
+    return acc, cm, report
+
+# Ensure that your training and test sets are correctly defined and preprocessed
+# Example: x_train, x_test, y_train, y_test, x_train_fs, x_test_fs, y_train_fs, y_test_fs must be defined
+
+# Example: Evaluate the model with the original features
+accuracy_fnn, conf_matrix_fnn, class_report_fnn = fnn(x_train, x_test, y_train, y_test)
+
+# Example: Evaluate the model with feature-selected data
+accuracy_fnn_fs, conf_matrix_fnn_fs, class_report_fnn_fs = fnn(x_train_fs, x_test_fs, y_train_fs, y_test_fs)
+
+# Print results
+print(f"Accuracy (Original Features): {accuracy_fnn:.2f}")
+print(f"Accuracy (Feature Selected): {accuracy_fnn_fs:.2f}")
+print("Confusion Matrix (Original Features):\n", conf_matrix_fnn)
+print("Confusion Matrix (Feature Selected):\n", conf_matrix_fnn_fs)
+print("Classification Report (Original Features):\n", class_report_fnn)
+print("Classification Report (Feature Selected):\n", class_report_fnn_fs)
+
+## 1D Convolutional Neural Network (1D CNN)
+import numpy as np
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+from sklearn.neural_network import MLPClassifier
+from sklearn.model_selection import train_test_split
+
+# Example function for classification using MLP from scikit-learn
+def fnn_sklearn(_x_train, _x_test, _y_train, _y_test):
+    # Initialize the MLPClassifier with one hidden layer
+    clf = MLPClassifier(hidden_layer_sizes=(64, 64), max_iter=1000, random_state=42, solver='adam', activation='relu')
+
+    # Train the model
+    clf.fit(_x_train, _y_train)
+    
+    # Evaluate the model
+    test_acc = clf.score(_x_test, _y_test)
+    print(f'Test accuracy: {test_acc:.2f}')
+    
+    # Make predictions
+    _y_pred = clf.predict(_x_test)
+
+    # Evaluate the predictions
+    acc = accuracy_score(_y_test, _y_pred)
+    cm = confusion_matrix(_y_test, _y_pred)
+    report = classification_report(_y_test, _y_pred)
+    
+    return acc, cm, report
+
+# Assuming you have defined your data `x_train`, `x_test`, `y_train`, and `y_test`
+# Evaluate the model with original features
+accuracy_fnn, conf_matrix_fnn, class_report_fnn = fnn_sklearn(x_train, x_test, y_train, y_test)
+
+# Evaluate the model with feature-selected data
+accuracy_fnn_fs, conf_matrix_fnn_fs, class_report_fnn_fs = fnn_sklearn(x_train_fs, x_test_fs, y_train_fs, y_test_fs)
+
+# Print results
+print(f"Accuracy: {accuracy_fnn:.2f}")
+print(f"Accuracy (Feature Selected): {accuracy_fnn_fs:.2f}")
+print("Confusion Matrix:\n", conf_matrix_fnn)
+print("Confusion Matrix (Feature Selected):\n", conf_matrix_fnn_fs)
+print("Classification Report:\n", class_report_fnn)
+print("Classification Report (Feature Selected):\n", class_report_fnn_fs)
+
+## Confusion Matrixs
+matrices = [conf_matrix_lr, conf_matrix_svm, conf_matrix_rf, conf_matrix_gnb]  # Replace with your confusion matrices
+accuracies = [accuracy_lr, accuracy_svm, accuracy_rf, accuracy_gnb]
+titles = ['Logistic Regression', 'SVM', 'Random Forest', 'Naive Bayes']
+
+# Create a figure with a 2x2 grid
+fig, axs = plt.subplots(2, 2, figsize=(12, 10))
+
+# Flatten the axes array for easy iteration
+axs = axs.flatten()
+
+
+for ax, cm, title, accuracy in zip(axs, matrices, titles, accuracies):
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax)
+    ax.set_title(f'{title} - Ac: {accuracy:.2f}')
+    ax.set_xlabel('Predicted')
+    ax.set_ylabel('True')
+
+plt.tight_layout()
+plt.show()
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.metrics import confusion_matrix
+
+# Example confusion matrices (replace with your actual confusion matrices)
+conf_matrix_fnn = [[50, 10, 5], [7, 45, 3], [3, 5, 52]]  # Replace with your FNN confusion matrix
+conf_matrix_cnn = [[55, 8, 7], [5, 50, 5], [4, 3, 60]]  # Replace with your CNN confusion matrix
+
+# Example accuracies (replace with your actual accuracy values)
+accuracy_fnn = 0.85
+accuracy_cnn = 0.88
+
+# Titles for each model
+titles = ['FNN', '1D CNN']
+
+# Create subplots for confusion matrices
+fig, axs = plt.subplots(1, 2, figsize=(10, 4))
+
+# Store the confusion matrices and accuracies in lists
+matrices = [conf_matrix_fnn, conf_matrix_cnn]
+accuracies = [accuracy_fnn, accuracy_cnn]
+
+# Loop through the axes, confusion matrices, and titles
+for ax, cm, title, accuracy in zip(axs, matrices, titles, accuracies):
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', ax=ax, cbar=False)
+    ax.set_title(f'{title} - Ac: {accuracy:.2f}')
+    ax.set_xlabel('Predicted Labels')
+    ax.set_ylabel('True Labels')
+
+# Adjust layout and show the plot
+plt.tight_layout()
+plt.show()
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Example accuracies (replace these with actual values from your models)
+accuracy_lr = 0.85
+accuracy_svm = 0.87
+accuracy_rf = 0.88
+accuracy_gnb = 0.82
+accuracy_fnn = 0.86
+accuracy_cnn = 0.89
+
+# Feature-selected accuracies (replace with actual values)
+accuracy_lr_fs = 0.84
+accuracy_svm_fs = 0.86
+accuracy_rf_fs = 0.87
+accuracy_gnb_fs = 0.81
+accuracy_fnn_fs = 0.85
+accuracy_cnn_fs = 0.88
+
+# Set the algorithms and accuracies for plotting
+algorithms = ['LR()', 'SVM', 'RF', 'NB', 'FNN', 'CNN']
+shade1 = [accuracy_lr*100, accuracy_svm*100, accuracy_rf*100, accuracy_gnb*100, accuracy_fnn*100, accuracy_cnn*100]
+shade2 = [accuracy_lr_fs*100, accuracy_svm_fs*100, accuracy_rf_fs*100, accuracy_gnb_fs*100, accuracy_fnn_fs*100, accuracy_cnn_fs*100]
+
+# Set the bar width
+bar_width = 0.35
+
+# Positions for each bar on the x-axis
+r1 = np.arange(len(algorithms))  # positions for the bars of shade1
+r2 = [x + bar_width for x in r1]  # positions for the bars of shade2
+
+# Create the grouped bar chart
+plt.bar(r1, shade1, color='lightblue', width=bar_width, edgecolor='grey', label='Using 21 Features')
+plt.bar(r2, shade2, color='orange', width=bar_width, edgecolor='grey', label='Using 15 Features')
+
+# Add labels
+plt.xlabel('Algorithms', fontweight='bold')
+plt.ylabel('Accuracy (in %)', fontweight='bold')
+plt.xticks([r + bar_width / 2 for r in range(len(algorithms))], algorithms)  # Adjust x-tick positions
+
+# Move the legend to the right of the plot
+plt.legend(loc='center left', bbox_to_anchor=(1, 0.5), title="Results")
+
+# Adjust the layout to make room for the legend
+plt.tight_layout()
+
+# Display the chart
+plt.show()
